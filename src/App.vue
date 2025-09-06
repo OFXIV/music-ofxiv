@@ -1,5 +1,5 @@
 <template>
-  <div style="padding: 20px;">
+  <div>
     <h1>Music OFXIV</h1>
     <AudioPlayer />
   </div>
