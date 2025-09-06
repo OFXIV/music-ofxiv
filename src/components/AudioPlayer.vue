@@ -191,7 +191,7 @@ const onTimeUpdate = () => {
   const i = lyrics.value.findIndex(line => line.time > currentTime)
   currentLyricIndex.value = i > 0 ? i - 1 : 0
   scrollToCurrentLyric()
-    // 保存进度
+  // 保存进度
   savePlaybackState()
 }
 
@@ -209,7 +209,8 @@ const savePlaybackState = () => {
   if (!currentSong.value || !audioRef.value) return
   localStorage.setItem('music-player-state', JSON.stringify({
     index: currentIndex.value,
-    time: audioRef.value.currentTime
+    time: audioRef.value.currentTime,
+    playing: isPlaying.value 
   }))
 }
 
@@ -228,6 +229,18 @@ onMounted(async () => {
         if (audioRef.value && state.time) {
           audioRef.value.currentTime = state.time
         }
+        if (state.playing) {
+        const tryResume = async () => {
+          try {
+            await audioRef.value.play()
+            isPlaying.value = true
+            document.removeEventListener('click', tryResume)
+            document.removeEventListener('touchstart', tryResume)
+          } catch {}
+        }
+        document.addEventListener('click', tryResume)
+        document.addEventListener('touchstart', tryResume)
+      }
       })
     }
   } catch (err) {
