@@ -1,17 +1,9 @@
 <template>
   <div class="music-player">
-    <!-- 加载状态 -->
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
 
-    <!-- 主体 -->
-    <div
-      v-else-if="songs.length"
-      class="stack-container"
-      @touchstart="onTouchStart"
-      @touchmove="onTouchMove"
-      @touchend="onTouchEnd"
-    >
+    <div v-else-if="songs.length" class="stack-container">
       <!-- 上一首 -->
       <div
         v-if="prevSong"
@@ -23,11 +15,7 @@
       </div>
 
       <!-- 当前播放 -->
-      <div
-        class="song-cover current"
-        :class="animClass('current')"
-        :style="{ transform: animationState.transform }"
-      >
+      <div class="song-cover current" :class="animClass('current')">
         <img :src="currentSong.cover" :alt="`${currentSong.name}封面`" />
         <div
           class="play-btn"
@@ -49,12 +37,10 @@
       </div>
     </div>
 
-    <!-- 歌曲信息 -->
     <div v-if="songs.length" class="song-info">
       <h2>{{ currentSong.name }} - {{ currentSong.artist }}</h2>
     </div>
 
-    <!-- 进度条 -->
     <div v-if="songs.length" class="progress-bar">
       <span class="time">{{ formatTime(currentTime) }}</span>
       <input
@@ -69,7 +55,6 @@
       <span class="time">{{ formatTime(duration) }}</span>
     </div>
 
-    <!-- 音量控制 -->
     <div class="volume-bar">
       <button @click="toggleMute" class="volume-btn">
         {{ muted ? '🔇' : '🔊' }}
@@ -84,7 +69,6 @@
       />
     </div>
 
-    <!-- 歌词 -->
     <div v-if="lyrics.length" class="lyrics" ref="lyricsRef">
       <transition-group name="lyric-fade" tag="div">
         <div
@@ -99,7 +83,6 @@
       </transition-group>
     </div>
 
-    <!-- 隐藏播放器 -->
     <audio
       ref="audioRef"
       :src="currentSong.url"
@@ -108,16 +91,15 @@
       @pause="isPlaying = false"
       @canplay="onCanPlay"
       @timeupdate="onTimeUpdate"
-      preload="auto"
+      preload="metadata"
       style="display:none"
     ></audio>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
-/* ===== 状态 ===== */
 const songs = ref([])
 const loading = ref(true)
 const error = ref(null)
@@ -139,14 +121,9 @@ const currentLyricIndex = ref(0)
 const lyricsRef = ref(null)
 const lineRefs = ref({})
 
-/* ===== 动画状态合并 ===== */
-const animationState = reactive({
-  direction: '',
-  animating: false,
-  transform: ''
-})
+const animDirection = ref('')
+const animating = ref(false)
 
-/* ===== 计算属性 ===== */
 const currentSong = computed(() => songs.value[currentIndex.value] || {})
 const prevSong = computed(() =>
   songs.value.length > 1
@@ -158,9 +135,12 @@ const nextSong = computed(() =>
     ? songs.value[(currentIndex.value + 1) % songs.value.length]
     : null
 )
-const animClass = (type) => animationState.direction ? `${type}-${animationState.direction}` : ''
 
-/* ===== 播放控制 ===== */
+const animClass = (type) => {
+  if (!animDirection.value) return ''
+  return `${type}-${animDirection.value}`
+}
+
 const togglePlay = async () => {
   if (!audioRef.value) return
   try {
@@ -168,25 +148,24 @@ const togglePlay = async () => {
     else await audioRef.value.play()
   } catch (err) {
     console.error('播放失败:', err)
-    alert('播放失败，请检查网络或格式')
     isPlaying.value = false
   }
 }
 
-const changeSong = async (step) => {
-  if (!songs.value.length || animationState.animating) return
-  animationState.animating = true
-  animationState.direction = step > 0 ? 'next' : 'prev'
-  
-  currentIndex.value = (currentIndex.value + step + songs.value.length) % songs.value.length
+const changeSong = (step) => {
+  if (!songs.value.length || animating.value) return
+  animating.value = true
+  ready.value = false
+  animDirection.value = step > 0 ? 'next' : 'prev'
 
-  await nextTick()
-  animationState.animating = false
-  animationState.direction = ''
-  animationState.transform = ''
+  setTimeout(() => {
+    currentIndex.value = (currentIndex.value + step + songs.value.length) % songs.value.length
+    animating.value = false
+    animDirection.value = ''
+  }, 500)
 }
 
-/* ===== 歌词解析 & 缓存 ===== */
+/* 歌词解析 */
 const lyricCache = new Map()
 const parseLRC = (text) => {
   const lines = text.split('\n')
@@ -205,7 +184,6 @@ const parseLRC = (text) => {
   return result.sort((a, b) => a.time - b.time)
 }
 
-/* ===== 自动播放 & 歌词加载 ===== */
 watch(currentSong, async (newSong) => {
   if (!newSong?.url || !audioRef.value) return
   audioRef.value.load()
@@ -230,7 +208,6 @@ watch(currentSong, async (newSong) => {
   }
 })
 
-/* ===== 播放器事件 ===== */
 const onCanPlay = () => {
   ready.value = true
   duration.value = audioRef.value?.duration || 0
@@ -244,106 +221,87 @@ const onTimeUpdate = () => {
   }
 }
 
-/* ===== 进度条 ===== */
-const onSeek = (e) => { seeking.value = true; sliderValue.value = parseFloat(e.target.value) }
-const onSeekEnd = () => { audioRef.value.currentTime = sliderValue.value; currentTime.value = sliderValue.value; seeking.value = false }
-watch(currentTime, val => { if (!seeking.value) sliderValue.value = val })
-
-/* ===== 音量 ===== */
-watch(volume, val => {
-  if(audioRef.value){
-    audioRef.value.volume = val
-    muted.value = val === 0
-  }
+const onSeek = (e) => {
+  seeking.value = true
+  sliderValue.value = parseFloat(e.target.value)
+}
+const onSeekEnd = () => {
+  audioRef.value.currentTime = sliderValue.value
+  currentTime.value = sliderValue.value
+  seeking.value = false
+}
+watch(currentTime, val => {
+  if (!seeking.value) sliderValue.value = val
 })
-const onVolumeChange = () => { if(audioRef.value) audioRef.value.volume = volume.value }
-const toggleMute = () => { if(audioRef.value){ muted.value = !muted.value; audioRef.value.muted = muted.value } }
 
-/* ===== 歌词滚动 ===== */
-let lastIndex = -1
+const onVolumeChange = () => {
+  if (!audioRef.value) return
+  audioRef.value.volume = volume.value
+  muted.value = volume.value === 0
+}
+const toggleMute = () => {
+  if (!audioRef.value) return
+  muted.value = !muted.value
+  audioRef.value.muted = muted.value
+}
+
 const updateCurrentLyric = () => {
-  if(!lyrics.value.length) return
-  for(let i=0;i<lyrics.value.length;i++){
-    if(currentTime.value < lyrics.value[i].time){
-      if(lastIndex !== i-1){
-        currentLyricIndex.value = Math.max(0,i-1)
-        scrollToCurrentLyric()
-        lastIndex = i-1
-      }
+  if (!lyrics.value.length) return
+  for (let i = 0; i < lyrics.value.length; i++) {
+    if (currentTime.value < lyrics.value[i].time) {
+      currentLyricIndex.value = Math.max(0, i - 1)
+      scrollToCurrentLyric()
       return
     }
   }
-  if(lastIndex !== lyrics.value.length-1){
-    currentLyricIndex.value = lyrics.value.length-1
-    scrollToCurrentLyric()
-    lastIndex = lyrics.value.length-1
-  }
+  currentLyricIndex.value = lyrics.value.length - 1
+  scrollToCurrentLyric()
 }
 
 const scrollToCurrentLyric = () => {
   const activeEl = lineRefs.value[lyrics.value[currentLyricIndex.value]?.time]
   const container = lyricsRef.value
-  if(!activeEl || !container) return
-  const offset = activeEl.offsetTop - container.clientHeight/2 + activeEl.clientHeight/2
-  container.scrollTo({ top: offset, behavior:'smooth' })
+  if (!activeEl || !container) return
+  const offset = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2
+  container.scrollTo({ top: offset, behavior: 'smooth' })
 }
 
-/* ===== 格式化时间 ===== */
 const formatTime = (sec) => {
   if (!sec || isNaN(sec)) return '00:00'
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-/* ===== 手势滑动 ===== */
-let startX = 0, moveX = 0, raf
-const threshold = 60
-
-const onTouchStart = (e) => {
-  if(animationState.animating) return
-  startX = e.touches[0].clientX
-  moveX = 0
-}
-
-const onTouchMove = (e) => {
-  if(animationState.animating) return
-  moveX = e.touches[0].clientX - startX
-  const percent = Math.min(Math.abs(moveX)/100,1)
-  animationState.direction = moveX>0?'prev':'next'
-  
-  cancelAnimationFrame(raf)
-  raf = requestAnimationFrame(() => {
-    animationState.transform = `translate3d(-50%,-50%,0) rotateY(${percent*60*(moveX>0?-1:1)}deg) scale(${1-0.1*percent})`
-  })
-}
-
-const onTouchEnd = () => {
-  if(animationState.animating) return
-  if(Math.abs(moveX) > threshold) changeSong(moveX>0?-1:1)
-  animationState.direction = ''
-  animationState.transform = ''
-  startX = moveX = 0
-}
-
-/* ===== 初始化 ===== */
 onMounted(async () => {
-  try{
+  try {
     const res = await fetch('https://raw.githubusercontent.com/OFXIV/resources/refs/heads/main/json/music.json')
-    if(!res.ok) throw new Error('获取歌曲列表失败')
+    if (!res.ok) throw new Error('获取歌曲列表失败')
     const data = await res.json()
-    songs.value = Array.isArray(data)?data:[]
-  }catch(err){
-    console.error('加载歌曲失败:',err)
+    songs.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    console.error('加载歌曲失败:', err)
     error.value = '加载歌曲失败，请稍后重试'
-  }finally{ loading.value = false }
+  } finally {
+    loading.value = false
+  }
 })
 </script>
-
 <style scoped>
-.music-player { display:flex; flex-direction:column; align-items:center; text-align:center; height:100vh; padding-top:20px; position:relative; }
-.stack-container { position:relative; width:100%; height:400px; perspective:1000px; }
-.song-cover { position:absolute; left:50%; transform:translate3d(-50%,-50%,0); border-radius:12px; overflow:hidden; transition:transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease; cursor:pointer; transform-style: preserve-3d; backface-visibility:hidden; }
+/* 样式保持原样 */
+.music-player {
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  height:100vh; padding-top:20px; position:relative;
+}
+.stack-container {
+  position:relative; width:100%; height:400px; perspective:1200px;
+}
+.song-cover {
+  position:absolute; left:50%; transform:translate3d(-50%,-50%,0);
+  border-radius:12px; overflow:hidden;
+  transition:transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease;
+  cursor:pointer; transform-style: preserve-3d;
+}
 .song-cover img { width:100%; height:100%; object-fit:cover; border-radius:inherit; }
 .song-cover.current { top:50%; width:280px; height:280px; z-index:3; box-shadow:0 12px 24px rgba(0,0,0,0.3); }
 .song-cover.prev { top:25%; width:200px; height:150px; z-index:2; opacity:0.6; transform: translate3d(-50%,-50%,0) scale(0.8) rotateX(10deg); }
@@ -356,7 +314,12 @@ onMounted(async () => {
 .prev-prev { transform:translate3d(-50%,-50%,0) scale(1) rotateX(0); opacity:1; z-index:3; }
 .next-prev { transform:translate3d(-50%,-120%,0) scale(0.7) rotateX(30deg); opacity:0; }
 
-.play-btn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:60px; height:60px; border-radius:50%; background:rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; cursor:pointer; transition: background 0.3s, transform 0.2s; }
+.play-btn {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:60px; height:60px; border-radius:50%; background:rgba(0,0,0,0.3);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  transition: background 0.3s, transform 0.2s;
+}
 .play-btn:hover { background: rgba(0,0,0,0.5); }
 .play-btn:active { transform: translate(-50%,-50%) scale(0.9); }
 .play-btn.disabled { cursor: not-allowed; opacity:0.5; }
