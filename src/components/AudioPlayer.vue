@@ -100,7 +100,7 @@ const goNext = () => {
 
 onMounted(async () => {
   try {
-    const res = await fetch('https://cdn.jsdelivr.net/gh/ofxiv/resources/json/music.json')
+    const res = await fetch('https://raw.githubusercontent.com/OFXIV/resources/refs/heads/main/json/music.json')
     if (!res.ok) throw new Error('获取歌曲列表失败')
     const data = await res.json()
     songs.value = Array.isArray(data) ? data : []
