@@ -191,6 +191,8 @@ const onTimeUpdate = () => {
   const i = lyrics.value.findIndex(line => line.time > currentTime)
   currentLyricIndex.value = i > 0 ? i - 1 : 0
   scrollToCurrentLyric()
+    // 保存进度
+  savePlaybackState()
 }
 
 const scrollToCurrentLyric = () => {
@@ -203,6 +205,13 @@ const scrollToCurrentLyric = () => {
     container.scrollTo({ top: offset, behavior: 'smooth' })
   })
 }
+const savePlaybackState = () => {
+  if (!currentSong.value || !audioRef.value) return
+  localStorage.setItem('music-player-state', JSON.stringify({
+    index: currentIndex.value,
+    time: audioRef.value.currentTime
+  }))
+}
 
 onMounted(async () => {
   try {
@@ -210,6 +219,17 @@ onMounted(async () => {
     if (!res.ok) throw new Error('获取歌曲列表失败')
     const data = await res.json()
     songs.value = Array.isArray(data) ? data : []
+
+    // 尝试恢复上次播放状态
+    const state = JSON.parse(localStorage.getItem('music-player-state') || '{}')
+    if (state.index >= 0 && state.index < songs.value.length) {
+      currentIndex.value = state.index
+      nextTick(() => {
+        if (audioRef.value && state.time) {
+          audioRef.value.currentTime = state.time
+        }
+      })
+    }
   } catch (err) {
     console.error(err)
     error.value = '加载歌曲失败，请稍后重试'
