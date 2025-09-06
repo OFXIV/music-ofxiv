@@ -3,7 +3,8 @@
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
 
-    <div v-else-if="songs.length" class="stack-container">
+    <div v-else-if="songs.length" class="stack-container" @touchstart="onTouchStart" @touchmove="onTouchMove"
+      @touchend="onTouchEnd">
       <!-- 上一首 -->
       <div v-if="prevSong" class="song-cover prev" :class="animClass('prev')" @click="changeSong(-1)">
         <img :src="prevSong.cover" :alt="`${prevSong.name}封面`" />
@@ -61,6 +62,7 @@ const lineRefs = ref({})
 
 const animDirection = ref('')
 const animating = ref(false)
+let scrollAnimationFrame = null
 
 const currentSong = computed(() => songs.value[currentIndex.value] || {})
 const prevSong = computed(() => songs.value.length > 1 ? songs.value[(currentIndex.value - 1 + songs.value.length) % songs.value.length] : null)
@@ -68,6 +70,47 @@ const nextSong = computed(() => songs.value.length > 1 ? songs.value[(currentInd
 const currentLyric = computed(() => lyrics.value[currentLyricIndex.value] || {})
 
 const animClass = type => animDirection.value ? `${type}-${animDirection.value}` : ''
+
+// 手势相关
+let touchStartX = 0
+let touchStartY = 0
+let touchDeltaX = 0
+let isSwiping = false
+const SWIPE_THRESHOLD = 60 // 触发切歌的最小距离（px）
+
+const onTouchStart = (e) => {
+  const touch = e.touches[0]
+  touchStartX = touch.clientX
+  touchStartY = touch.clientY
+  touchDeltaX = 0
+  isSwiping = true
+}
+
+const onTouchMove = (e) => {
+  if (!isSwiping) return
+  const touch = e.touches[0]
+  const deltaX = touch.clientX - touchStartX
+  const deltaY = touch.clientY - touchStartY
+  touchDeltaX = deltaX
+
+  // 阻止垂直滚动只有当水平滑动更明显时
+  if (Math.abs(deltaX) > Math.abs(deltaY)) {
+    e.preventDefault() // 阻止网页左右滚动
+  }
+}
+
+const onTouchEnd = () => {
+  if (!isSwiping) return
+  if (touchDeltaX > SWIPE_THRESHOLD) {
+    // 向右滑动 -> 上一首
+    changeSong(-1)
+  } else if (touchDeltaX < -SWIPE_THRESHOLD) {
+    // 向左滑动 -> 下一首
+    changeSong(1)
+  }
+  isSwiping = false
+  touchDeltaX = 0
+}
 
 /* 播放/暂停 */
 const togglePlay = async () => {
@@ -86,16 +129,26 @@ const togglePlay = async () => {
   }
 }
 
-/* 切歌 */
+/* 切歌优化 */
 const changeSong = step => {
   if (!songs.value.length || animating.value) return
   animating.value = true
   animDirection.value = step > 0 ? 'next' : 'prev'
 
+  // 预加载下一首
+  const nextIndex = (currentIndex.value + step + songs.value.length) % songs.value.length
+  const nextSongObj = songs.value[nextIndex]
+  if (audioRef.value && nextSongObj?.url) {
+    audioRef.value.src = nextSongObj.url
+    audioRef.value.load()
+  }
+
   setTimeout(async () => {
-    currentIndex.value = (currentIndex.value + step + songs.value.length) % songs.value.length
+    currentIndex.value = nextIndex
     animating.value = false
     animDirection.value = ''
+
+    // 切歌后播放
     if (audioRef.value && isPlaying.value) {
       try {
         await nextTick()
@@ -104,7 +157,7 @@ const changeSong = step => {
         isPlaying.value = false
       }
     }
-  }, 500)
+  }, 500) // 动画时长保持 500ms
 }
 
 /* 歌词解析 */
@@ -120,7 +173,6 @@ const parseLRC = text => text.split('\n').map(line => {
 
 watch(currentSong, async newSong => {
   if (!newSong.url || !audioRef.value) return
-  audioRef.value.load()
   lyrics.value = []
   currentLyricIndex.value = 0
   if (newSong.lrc) {
@@ -132,6 +184,7 @@ watch(currentSong, async newSong => {
   }
 })
 
+/* 歌词滚动优化 */
 const onTimeUpdate = () => {
   if (!lyrics.value.length) return
   const currentTime = audioRef.value.currentTime
@@ -141,11 +194,14 @@ const onTimeUpdate = () => {
 }
 
 const scrollToCurrentLyric = () => {
+  if (scrollAnimationFrame) cancelAnimationFrame(scrollAnimationFrame)
   const activeEl = lineRefs.value[currentLyric.value.time]
   const container = lyricsRef.value
   if (!activeEl || !container) return
   const offset = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2
-  requestAnimationFrame(() => container.scrollTo({ top: offset, behavior: 'smooth' }))
+  scrollAnimationFrame = requestAnimationFrame(() => {
+    container.scrollTo({ top: offset, behavior: 'smooth' })
+  })
 }
 
 onMounted(async () => {
@@ -248,11 +304,9 @@ onMounted(async () => {
 }
 
 .song-info {
-  font-weight: 400;
+  font-weight: 500;
   color: #222;
-  margin-top: 4px;
   font-size: 14px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.637);
 }
 
 .lyrics {
@@ -260,35 +314,34 @@ onMounted(async () => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 70px;
+  height: 40px;
   backdrop-filter: blur(12px);
   overflow: hidden;
   padding: 14px;
   text-align: center;
   font-size: 14px;
-  line-height: 1.4;
   z-index: 9999;
 }
 
 .lyric-line {
+  will-change: transform, opacity;
   opacity: 0.5;
   transform: scale(0.95);
-  transition: all 0.4s ease;
+  transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .lyric-line.active {
   color: #000;
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: 540;
   opacity: 1;
-  transform: scale(1);
+  transform: scale(1.1);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .lyric-fade-enter-active,
 .lyric-fade-leave-active {
-  transition: all 0.4s ease;
+  transition: all 0.15s ease;
 }
 
 .lyric-fade-enter-from,
@@ -365,23 +418,76 @@ onMounted(async () => {
 }
 
 /* 响应式适配 */
-@media (max-width: 400px) {
+@media (max-width: 480px) {
+  .stack-container {
+    min-height: 220px;
+  }
+
   .song-cover {
-    width: 220px;
-    height: 220px;
+    width: 180px;
+    height: 180px;
   }
 
   .song-cover.prev {
-    transform: translateX(-120px) translateY(-50%) rotateY(15deg) scale(0.8);
+    transform: translateX(-100px) translateY(-50%) rotateY(15deg) scale(0.75);
+    opacity: 0.4;
   }
 
   .song-cover.next {
-    transform: translateX(120px) translateY(-50%) rotateY(-15deg) scale(0.8);
+    transform: translateX(100px) translateY(-50%) rotateY(-15deg) scale(0.75);
+    opacity: 0.4;
   }
 
   .play-btn {
-    width: 50px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .icon.play {
+    border-left: 14px solid #fff;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+  }
+
+  .icon.pause {
+    width: 14px;
+    height: 14px;
+  }
+
+  .icon.pause::before,
+  .icon.pause::after {
+    width: 4px;
+  }
+
+  .song-info h2 {
+    font-size: 12px;
+    margin-top: 2px;
+  }
+
+  /* 歌词区域优化 */
+  .lyrics {
+    height: 30px;
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    backdrop-filter: blur(8px);
+  }
+
+  .lyric-line {
+    opacity: 0.6;
+    transform: scale(0.95);
+  }
+
+  .lyric-line.active {
+    font-size: 14px;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* 过渡动画保持流畅 */
+  .lyric-fade-enter-from,
+  .lyric-fade-leave-to {
+    transform: translateY(8px);
   }
 }
 </style>
