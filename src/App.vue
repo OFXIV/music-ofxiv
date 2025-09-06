@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1>Music OFXIV</h1>
+    <h1>OFXIV Music</h1>
     <AudioPlayer />
   </div>
 </template>
@@ -11,8 +11,9 @@ import AudioPlayer from './components/AudioPlayer.vue'
 <style>
 div h1 {
   color: #1b1a1a;
-  font-size: 2.5rem;
+  font-size: 2.4rem;
   text-align: center;
   margin: 0;
+  font-weight: 500;
 }
 </style>
