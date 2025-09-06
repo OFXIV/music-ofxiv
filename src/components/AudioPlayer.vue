@@ -1,4 +1,5 @@
 <template>
+  <!-- 音乐播放器容器 -->
   <div class="music-player">
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
@@ -6,12 +7,12 @@
     <div v-else-if="songs.length" class="stack-container" @touchstart="onTouchStart" @touchmove="onTouchMove"
       @touchend="onTouchEnd">
       <!-- 上一首 -->
-      <div v-if="prevSong" class="song-cover prev" :class="animClass('prev')" @click="changeSong(-1)">
+      <div v-if="prevSong" class="song-cover prev" @click="changeSong(-1)">
         <img :src="prevSong.cover" :alt="`${prevSong.name}封面`" />
       </div>
 
       <!-- 当前播放 -->
-      <div class="song-cover current" :class="animClass('current')">
+      <div class="song-cover current">
         <img :src="currentSong.cover" :alt="`${currentSong.name}封面`" />
         <div class="play-btn" @click.stop="togglePlay">
           <div :class="['icon', isPlaying ? 'pause' : 'play']"></div>
@@ -19,7 +20,7 @@
       </div>
 
       <!-- 下一首 -->
-      <div v-if="nextSong" class="song-cover next" :class="animClass('next')" @click="changeSong(1)">
+      <div v-if="nextSong" class="song-cover next"  @click="changeSong(1)">
         <img :src="nextSong.cover" :alt="`${nextSong.name}封面`" />
       </div>
     </div>
@@ -60,16 +61,12 @@ const currentLyricIndex = ref(0)
 const lyricsRef = ref(null)
 const lineRefs = ref({})
 
-const animDirection = ref('')
-const animating = ref(false)
 let scrollAnimationFrame = null
 
 const currentSong = computed(() => songs.value[currentIndex.value] || {})
 const prevSong = computed(() => songs.value.length > 1 ? songs.value[(currentIndex.value - 1 + songs.value.length) % songs.value.length] : null)
 const nextSong = computed(() => songs.value.length > 1 ? songs.value[(currentIndex.value + 1) % songs.value.length] : null)
 const currentLyric = computed(() => lyrics.value[currentLyricIndex.value] || {})
-
-const animClass = type => animDirection.value ? `${type}-${animDirection.value}` : ''
 
 // 手势相关
 let touchStartX = 0
@@ -131,9 +128,7 @@ const togglePlay = async () => {
 
 /* 切歌优化 */
 const changeSong = step => {
-  if (!songs.value.length || animating.value) return
-  animating.value = true
-  animDirection.value = step > 0 ? 'next' : 'prev'
+  if (!songs.value.length) return
 
   // 预加载下一首
   const nextIndex = (currentIndex.value + step + songs.value.length) % songs.value.length
@@ -145,14 +140,13 @@ const changeSong = step => {
 
   setTimeout(async () => {
     currentIndex.value = nextIndex
-    animating.value = false
-    animDirection.value = ''
 
     // 切歌后播放
-    if (audioRef.value && isPlaying.value) {
+    if (audioRef.value) {
       try {
         await nextTick()
         await audioRef.value.play()
+        isPlaying.value = true
       } catch {
         isPlaying.value = false
       }
@@ -284,8 +278,8 @@ onMounted(async () => {
   overflow: hidden;
   cursor: pointer;
   transform-style: preserve-3d;
-  transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55),
-    opacity 0.4s, box-shadow 0.4s;
+  transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55), 
+              opacity 0.4s ease, box-shadow 0.4s;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.295);
 }
 
@@ -312,28 +306,6 @@ onMounted(async () => {
   transform: translateX(160px) translateY(-50%) rotateY(-15deg) scale(0.85);
   opacity: 0.5;
   z-index: 2;
-}
-
-.current-next {
-  transform: translateX(-300px) rotateY(90deg) scale(0.8);
-  opacity: 0;
-}
-
-.current-prev {
-  transform: translateX(300px) rotateY(-90deg) scale(0.8);
-  opacity: 0;
-}
-
-.next-next {
-  transform: translateX(0) rotateY(0deg) scale(1);
-  opacity: 1;
-  z-index: 3;
-}
-
-.prev-prev {
-  transform: translateX(0) rotateY(0deg) scale(1);
-  opacity: 1;
-  z-index: 3;
 }
 
 .song-info {
