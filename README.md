@@ -1,5 +1,47 @@
-# Vue 3 + Vite
+# Music OFXIV
+- 每天两次更新歌单内容(UTC 00:00,UTC 12:00)，`XIV`14首歌
+- 基于 Vue 3 + Vite 构建的音乐播放器应用
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+## 技术栈
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+- Vue 3
+- Vite
+- Vue Composition API
+- 现代化 CSS
+
+## 快速开始
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 开发环境运行
+
+```bash
+npm run dev
+```
+
+### 构建生产版本
+
+```bash
+npm run build
+```
+
+### 预览生产版本
+
+```bash
+npm run preview
+```
+
+## 数据源
+
+歌曲列表通过远程 API 加载：
+```
+https://raw.githubusercontent.com/OFXIV/resources/refs/heads/main/json/music.json
+```
+
+## 开发指南
+
+项目使用 Vue 3 的 `<script setup>` 语法，推荐查看 [Vue 3 文档](https://v3.vuejs.org/) 了解更多细节。
