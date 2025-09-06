@@ -5,12 +5,7 @@
 
     <div v-else-if="songs.length" class="stack-container">
       <!-- 上一首 -->
-      <div
-        v-if="prevSong"
-        class="song-cover prev"
-        :class="animClass('prev')"
-        @click="changeSong(-1)"
-      >
+      <div v-if="prevSong" class="song-cover prev" :class="animClass('prev')" @click="changeSong(-1)">
         <img :src="prevSong.cover" :alt="`${prevSong.name}封面`" />
       </div>
 
@@ -23,12 +18,7 @@
       </div>
 
       <!-- 下一首 -->
-      <div
-        v-if="nextSong"
-        class="song-cover next"
-        :class="animClass('next')"
-        @click="changeSong(1)"
-      >
+      <div v-if="nextSong" class="song-cover next" :class="animClass('next')" @click="changeSong(1)">
         <img :src="nextSong.cover" :alt="`${nextSong.name}封面`" />
       </div>
     </div>
@@ -41,29 +31,16 @@
     <!-- 歌词 -->
     <div v-if="lyrics.length" class="lyrics" ref="lyricsRef">
       <transition-group name="lyric-fade" tag="div">
-        <div
-          v-for="line in lyrics"
-          :key="line.time"
-          class="lyric-line"
-          :class="{ active: line === currentLyric }"
-          :ref="el => lineRefs[line.time] = el"
-        >
+        <div v-for="line in lyrics" :key="line.time" class="lyric-line" :class="{ active: line === currentLyric }"
+          :ref="el => lineRefs[line.time] = el">
           {{ line.text }}
         </div>
       </transition-group>
     </div>
 
-    <audio
-      ref="audioRef"
-      :src="currentSong.url"
-      @ended="changeSong(1)"
-      @play="isPlaying = true"
-      @pause="isPlaying = false"
-      @canplay="ready = true"
-      @timeupdate="onTimeUpdate"
-      preload="metadata"
-      style="display:none"
-    ></audio>
+    <audio ref="audioRef" :src="currentSong.url" @ended="changeSong(1)" @play="isPlaying = true"
+      @pause="isPlaying = false" @timeupdate="onTimeUpdate" preload="metadata"
+      style="position:absolute; width:0; height:0; opacity:0;"></audio>
   </div>
 </template>
 
@@ -76,7 +53,6 @@ const error = ref(null)
 const currentIndex = ref(0)
 const audioRef = ref(null)
 const isPlaying = ref(false)
-const ready = ref(false)
 
 const lyrics = ref([])
 const currentLyricIndex = ref(0)
@@ -93,20 +69,27 @@ const currentLyric = computed(() => lyrics.value[currentLyricIndex.value] || {})
 
 const animClass = type => animDirection.value ? `${type}-${animDirection.value}` : ''
 
+/* 播放/暂停 */
 const togglePlay = async () => {
-  if (!audioRef.value || !ready.value) return
+  if (!audioRef.value) return
   try {
-    isPlaying.value ? audioRef.value.pause() : await audioRef.value.play()
+    if (isPlaying.value) {
+      audioRef.value.pause()
+      isPlaying.value = false
+    } else {
+      await audioRef.value.play()
+      isPlaying.value = true
+    }
   } catch (err) {
     console.error('播放失败', err)
     isPlaying.value = false
   }
 }
 
+/* 切歌 */
 const changeSong = step => {
   if (!songs.value.length || animating.value) return
   animating.value = true
-  ready.value = false
   animDirection.value = step > 0 ? 'next' : 'prev'
 
   setTimeout(async () => {
@@ -114,8 +97,12 @@ const changeSong = step => {
     animating.value = false
     animDirection.value = ''
     if (audioRef.value && isPlaying.value) {
-      try { await nextTick(); await audioRef.value.play() } 
-      catch { isPlaying.value = false }
+      try {
+        await nextTick()
+        await audioRef.value.play()
+      } catch {
+        isPlaying.value = false
+      }
     }
   }, 500)
 }
@@ -125,11 +112,11 @@ const parseLRC = text => text.split('\n').map(line => {
   const match = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/.exec(line)
   if (!match) return null
   const min = parseInt(match[1]), sec = parseInt(match[2])
-  const ms = match[3] ? parseInt(match[3].padEnd(3,'0')) : 0
+  const ms = match[3] ? parseInt(match[3].padEnd(3, '0')) : 0
   const time = min * 60 + sec + ms / 1000
   const textContent = line.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/, '').trim()
   return textContent ? { time, text: textContent } : null
-}).filter(Boolean).sort((a,b)=>a.time-b.time)
+}).filter(Boolean).sort((a, b) => a.time - b.time)
 
 watch(currentSong, async newSong => {
   if (!newSong.url || !audioRef.value) return
@@ -209,7 +196,7 @@ onMounted(async () => {
   cursor: pointer;
   transform-style: preserve-3d;
   transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55),
-              opacity 0.4s, box-shadow 0.4s;
+    opacity 0.4s, box-shadow 0.4s;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.295);
 }
 
@@ -221,14 +208,44 @@ onMounted(async () => {
   user-select: none;
 }
 
-.song-cover.current { transform: translateX(0) translateY(-50%) rotateY(0deg) scale(1); z-index: 3; }
-.song-cover.prev { transform: translateX(-160px) translateY(-50%) rotateY(15deg) scale(0.85); opacity: 0.5; z-index: 2; }
-.song-cover.next { transform: translateX(160px) translateY(-50%) rotateY(-15deg) scale(0.85); opacity: 0.5; z-index: 2; }
+.song-cover.current {
+  transform: translateX(0) translateY(-50%) rotateY(0deg) scale(1);
+  z-index: 3;
+}
 
-.current-next { transform: translateX(-300px) rotateY(90deg) scale(0.8); opacity: 0; }
-.current-prev { transform: translateX(300px) rotateY(-90deg) scale(0.8); opacity: 0; }
-.next-next { transform: translateX(0) rotateY(0deg) scale(1); opacity: 1; z-index: 3; }
-.prev-prev { transform: translateX(0) rotateY(0deg) scale(1); opacity: 1; z-index: 3; }
+.song-cover.prev {
+  transform: translateX(-160px) translateY(-50%) rotateY(15deg) scale(0.85);
+  opacity: 0.5;
+  z-index: 2;
+}
+
+.song-cover.next {
+  transform: translateX(160px) translateY(-50%) rotateY(-15deg) scale(0.85);
+  opacity: 0.5;
+  z-index: 2;
+}
+
+.current-next {
+  transform: translateX(-300px) rotateY(90deg) scale(0.8);
+  opacity: 0;
+}
+
+.current-prev {
+  transform: translateX(300px) rotateY(-90deg) scale(0.8);
+  opacity: 0;
+}
+
+.next-next {
+  transform: translateX(0) rotateY(0deg) scale(1);
+  opacity: 1;
+  z-index: 3;
+}
+
+.prev-prev {
+  transform: translateX(0) rotateY(0deg) scale(1);
+  opacity: 1;
+  z-index: 3;
+}
 
 .song-info {
   font-weight: 400;
@@ -339,15 +356,32 @@ onMounted(async () => {
   border-radius: 2px;
 }
 
-.icon.pause::before { left: 0; }
-.icon.pause::after { right: 0; }
+.icon.pause::before {
+  left: 0;
+}
+
+.icon.pause::after {
+  right: 0;
+}
 
 /* 响应式适配 */
 @media (max-width: 400px) {
-  .song-cover { width: 220px; height: 220px; }
-  .song-cover.prev { transform: translateX(-120px) translateY(-50%) rotateY(15deg) scale(0.8); }
-  .song-cover.next { transform: translateX(120px) translateY(-50%) rotateY(-15deg) scale(0.8); }
-  .play-btn { width: 50px; height: 50px; }
-}
+  .song-cover {
+    width: 220px;
+    height: 220px;
+  }
 
+  .song-cover.prev {
+    transform: translateX(-120px) translateY(-50%) rotateY(15deg) scale(0.8);
+  }
+
+  .song-cover.next {
+    transform: translateX(120px) translateY(-50%) rotateY(-15deg) scale(0.8);
+  }
+
+  .play-btn {
+    width: 50px;
+    height: 50px;
+  }
+}
 </style>
