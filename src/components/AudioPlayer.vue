@@ -90,19 +90,16 @@ const onTouchMove = (e) => {
   const deltaY = touch.clientY - touchStartY
   touchDeltaX = deltaX
 
-  // 阻止垂直滚动只有当水平滑动更明显时
   if (Math.abs(deltaX) > Math.abs(deltaY)) {
-    e.preventDefault() // 阻止网页左右滚动
+    e.preventDefault()
   }
 }
 
 const onTouchEnd = () => {
   if (!isSwiping) return
   if (touchDeltaX > SWIPE_THRESHOLD) {
-    // 向右滑动 -> 上一首
     changeSong(-1)
   } else if (touchDeltaX < -SWIPE_THRESHOLD) {
-    // 向左滑动 -> 下一首
     changeSong(1)
   }
   isSwiping = false
@@ -126,32 +123,22 @@ const togglePlay = async () => {
   }
 }
 
-/* 切歌优化 */
-const changeSong = step => {
+/* 切歌（优化版） */
+const changeSong = async (step) => {
   if (!songs.value.length) return
-
-  // 预加载下一首
   const nextIndex = (currentIndex.value + step + songs.value.length) % songs.value.length
-  const nextSongObj = songs.value[nextIndex]
-  if (audioRef.value && nextSongObj?.url) {
-    audioRef.value.src = nextSongObj.url
-    audioRef.value.load()
-  }
+  currentIndex.value = nextIndex
 
-  setTimeout(async () => {
-    currentIndex.value = nextIndex
-
-    // 切歌后播放
-    if (audioRef.value) {
-      try {
-        await nextTick()
-        await audioRef.value.play()
-        isPlaying.value = true
-      } catch {
-        isPlaying.value = false
-      }
+  await nextTick()
+  if (audioRef.value && currentSong.value?.url) {
+    audioRef.value.src = currentSong.value.url
+    try {
+      await audioRef.value.play()
+      isPlaying.value = true
+    } catch {
+      isPlaying.value = false
     }
-  }, 500) // 动画时长保持 500ms
+  }
 }
 
 /* 歌词解析 */
@@ -178,14 +165,19 @@ watch(currentSong, async newSong => {
   }
 })
 
-/* 歌词滚动优化 */
+/* 歌词滚动优化 + 修复最后一句跳回 */
 const onTimeUpdate = () => {
   if (!lyrics.value.length) return
   const currentTime = audioRef.value.currentTime
-  const i = lyrics.value.findIndex(line => line.time > currentTime)
-  currentLyricIndex.value = i > 0 ? i - 1 : 0
+  let i = lyrics.value.findIndex(line => line.time > currentTime)
+
+  if (i === -1) {
+    currentLyricIndex.value = lyrics.value.length - 1
+  } else {
+    currentLyricIndex.value = i > 0 ? i - 1 : 0
+  }
+
   scrollToCurrentLyric()
-  // 保存进度
   savePlaybackState()
 }
 
@@ -199,11 +191,14 @@ const scrollToCurrentLyric = () => {
     container.scrollTo({ top: offset, behavior: 'smooth' })
   })
 }
+
+/* 保存播放状态（增加歌词进度） */
 const savePlaybackState = () => {
   if (!currentSong.value || !audioRef.value) return
   localStorage.setItem('music-player-state', JSON.stringify({
     index: currentIndex.value,
-    time: audioRef.value.currentTime
+    time: audioRef.value.currentTime,
+    lyricIndex: currentLyricIndex.value
   }))
 }
 
@@ -218,11 +213,13 @@ onMounted(async () => {
     const state = JSON.parse(localStorage.getItem('music-player-state') || '{}')
     if (state.index >= 0 && state.index < songs.value.length) {
       currentIndex.value = state.index
-      nextTick(() => {
-        if (audioRef.value && state.time) {
-          audioRef.value.currentTime = state.time
-        }
-      })
+      await nextTick()
+      if (audioRef.value && state.time) {
+        audioRef.value.currentTime = state.time
+      }
+      if (state.lyricIndex >= 0) {
+        currentLyricIndex.value = state.lyricIndex
+      }
     }
   } catch (err) {
     console.error(err)
